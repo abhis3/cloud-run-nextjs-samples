@@ -1,0 +1,66 @@
+{
+  "name": "config-conditional-routes",
+  "description": "No proxy.ts. Uses next.config.mjs rewrites and headers with has/missing (cookie/header) conditions to serve different static content on the same path. Documents a known gap: the runtime guard only covers proxy-matched routes, so these conditional static routes keep s-maxage.",
+  "knownGap": true,
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    }
+  },
+  "routes": [
+    {
+      "name": "GET / (unconditional static home page)",
+      "path": "/",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Config Conditional Routes Home"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /pricing without x-tier header (default static content, keeps s-maxage — known gap)",
+      "path": "/pricing",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Standard Pricing Tier"],
+      "knownGap": true,
+      "mode": "known-gap"
+    },
+    {
+      "name": "GET /pricing with x-tier: enterprise header (rewritten to /pricing-enterprise, keeps s-maxage — known gap)",
+      "path": "/pricing",
+      "method": "GET",
+      "requestHeaders": { "x-tier": "enterprise" },
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "responseHeaders": { "x-pricing-variant": "enterprise" },
+      "bodyContains": ["Enterprise Pricing Tier"],
+      "knownGap": true,
+      "mode": "known-gap"
+    },
+    {
+      "name": "GET /offer without tier=vip cookie (missing condition rewrites to /banner-default, keeps s-maxage — known gap)",
+      "path": "/offer",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Default Public Banner"],
+      "knownGap": true,
+      "mode": "known-gap"
+    },
+    {
+      "name": "GET /offer with Cookie: tier=vip (has condition rewrites to /banner-vip, keeps s-maxage — known gap)",
+      "path": "/offer",
+      "method": "GET",
+      "requestHeaders": { "cookie": "tier=vip" },
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "responseHeaders": { "x-offer-variant": "vip" },
+      "bodyContains": ["VIP Member Banner"],
+      "knownGap": true,
+      "mode": "known-gap"
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "name": "proxy-matchers",
+  "description": "proxy.ts config.matcher entries with has/missing conditions (header, cookie, query) in front of SSG/ISR pages; matched paths are guarded whether or not the condition holds.",
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    }
+  },
+  "routes": [
+    {
+      "name": "GET / (unmatched SSG page)",
+      "path": "/",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Unmatched Static Home Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /public-isr (unmatched ISR page)",
+      "path": "/public-isr",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Unmatched Public ISR Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /header-gated with matching header (condition holds, proxy runs, guarded)",
+      "path": "/header-gated",
+      "method": "GET",
+      "requestHeaders": { "x-custom-header": "enabled" },
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Header Condition SSG Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /header-gated without matching header (condition does not hold, still guarded)",
+      "path": "/header-gated",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "bodyContains": ["Header Condition SSG Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /cookie-gated without bypass cookie (missing condition holds, proxy runs, guarded)",
+      "path": "/cookie-gated",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Cookie Condition ISR Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /cookie-gated with bypass cookie (missing condition does not hold, still guarded)",
+      "path": "/cookie-gated",
+      "method": "GET",
+      "requestHeaders": { "cookie": "bypass_proxy=1" },
+      "status": 200,
+      "cacheControl": "guarded",
+      "bodyContains": ["Cookie Condition ISR Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /query-gated?draft=true (query condition holds, proxy runs, guarded)",
+      "path": "/query-gated?draft=true",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Query Condition SSG Page"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /query-gated without query param (query condition does not hold, still guarded)",
+      "path": "/query-gated",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "bodyContains": ["Query Condition SSG Page"],
+      "mode": "pass"
+    }
+  ]
+}

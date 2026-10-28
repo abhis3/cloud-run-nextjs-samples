@@ -1,0 +1,42 @@
+{
+  "name": "crashlytics-sourcemaps",
+  "description": "Next.js app built with CRASHLYTICS_UPLOAD_MAPPING=true. Browser .js.map files are emitted during next build and stripped from the final container image by google.nodejs.websourcemaps; live Crashlytics upload requires a real Firebase app and is marked manual.",
+  "buildEnv": {
+    "CRASHLYTICS_UPLOAD_MAPPING": "true"
+  },
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    },
+    "noFilesMatching": [".js.map"],
+    "manualChecks": [
+      {
+        "name": "crashlytics-sourcemap-upload",
+        "description": "Uploading browser .js.map files via firebase crashlytics:sourcemap:upload requires a live Firebase Web App ID (GOOGLE_CRASHLYTICS_APP_ID or FIREBASE_CRASHLYTICS_APP_ID) and GCP project credentials (GOOGLE_CLOUD_PROJECT).",
+        "mode": "manual"
+      }
+    ]
+  },
+  "routes": [
+    {
+      "name": "GET / (unguarded SSG home with client bundle)",
+      "path": "/",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Crashlytics Source Maps Sample", "Client Widget Ready"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /dashboard (guarded route behind proxy.ts)",
+      "path": "/dashboard",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Crashlytics Dashboard"],
+      "mode": "pass"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "name": "basepath-i18n",
+  "description": "Next.js basePath (/base) + Pages Router i18n (locales en, fr, de; defaultLocale en) with proxy.ts gating an SSG page (/dashboard).",
+  "buildIdProbePath": "/base",
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    }
+  },
+  "routes": [
+    {
+      "name": "GET /base (default locale en SSG home, unguarded)",
+      "path": "/base",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Home Page (en)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/fr (fr locale SSG home, unguarded)",
+      "path": "/base/fr",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Home Page (fr)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/about (default locale en SSG about, unguarded)",
+      "path": "/base/about",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["About Page (en)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/de/about (de locale SSG about, unguarded)",
+      "path": "/base/de/about",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["About Page (de)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/dashboard (default locale en SSG behind proxy.ts, guarded)",
+      "path": "/base/dashboard",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Dashboard SSG Page (en)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/en/dashboard (explicit en locale prefix behind proxy.ts, guarded)",
+      "path": "/base/en/dashboard",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Dashboard SSG Page (en)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/fr/dashboard (fr locale prefix behind proxy.ts, guarded)",
+      "path": "/base/fr/dashboard",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Dashboard SSG Page (fr)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/de/dashboard (de locale prefix behind proxy.ts, guarded)",
+      "path": "/base/de/dashboard",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Dashboard SSG Page (de)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/_next/data/<buildId>/en/dashboard.json (en SSG data behind proxy.ts, guarded)",
+      "path": "/base/_next/data/<buildId>/en/dashboard.json",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/_next/data/<buildId>/fr/dashboard.json (fr SSG data behind proxy.ts, guarded)",
+      "path": "/base/_next/data/<buildId>/fr/dashboard.json",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "mode": "pass"
+    },
+    {
+      "name": "GET /base/_next/data/<buildId>/de/dashboard.json (de SSG data behind proxy.ts, guarded)",
+      "path": "/base/_next/data/<buildId>/de/dashboard.json",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "mode": "pass"
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "name": "pages-router-proxy",
+  "description": "Pages Router SSG/ISR pages plus an API route behind proxy.ts, including /_next/data/<buildId>/... requests for guarded pages.",
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    }
+  },
+  "routes": [
+    {
+      "name": "GET / (unguarded Pages Router SSG HTML)",
+      "path": "/",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Pages Router Public Home (public-home-ssg)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /_next/data/<buildId>/index.json (unguarded Pages Router SSG data JSON)",
+      "path": "/_next/data/<buildId>/index.json",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["public-home-ssg"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /public-isr (unguarded Pages Router ISR HTML)",
+      "path": "/public-isr",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": ["Pages Router Public ISR (public-isr)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /guarded-ssg (guarded Pages Router SSG HTML)",
+      "path": "/guarded-ssg",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Pages Router Guarded SSG (guarded-ssg)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /_next/data/<buildId>/guarded-ssg.json (guarded Pages Router SSG data JSON)",
+      "path": "/_next/data/<buildId>/guarded-ssg.json",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["guarded-ssg"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /guarded-isr (guarded Pages Router ISR HTML)",
+      "path": "/guarded-isr",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["Pages Router Guarded ISR (guarded-isr)"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /_next/data/<buildId>/guarded-isr.json (guarded Pages Router ISR data JSON)",
+      "path": "/_next/data/<buildId>/guarded-isr.json",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "bodyContains": ["guarded-isr"],
+      "mode": "pass"
+    },
+    {
+      "name": "GET /api/guarded-api (guarded Pages Router API route)",
+      "path": "/api/guarded-api",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": { "x-proxy-ran": "1" },
+      "jsonEquals": { "ok": true, "route": "guarded-api" },
+      "mode": "pass"
+    },
+    {
+      "name": "GET /api/public-api (unguarded Pages Router API route)",
+      "path": "/api/public-api",
+      "method": "GET",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "jsonEquals": { "ok": true, "route": "public-api" },
+      "mode": "pass"
+    }
+  ]
+}
