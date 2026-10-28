@@ -1,0 +1,46 @@
+{
+  "name": "monorepo-nx",
+  "description": "Nx + npm workspaces monorepo (apps/web + packages/ui) built with GOOGLE_BUILDABLE=apps/web.",
+  "buildEnv": {
+    "GOOGLE_BUILDABLE": "apps/web"
+  },
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    }
+  },
+  "routes": [
+    {
+      "name": "Monorepo root page with workspace package (/)",
+      "path": "/",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": [
+        "Monorepo Web",
+        "Hello from @repo/ui workspace package!"
+      ]
+    },
+    {
+      "name": "Monorepo static page (/about)",
+      "path": "/about",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": [
+        "Monorepo About"
+      ]
+    },
+    {
+      "name": "Monorepo guarded proxy route (/dashboard)",
+      "path": "/dashboard",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": {
+        "x-monorepo-proxy": "1"
+      },
+      "bodyContains": [
+        "Monorepo Dashboard"
+      ]
+    }
+  ]
+}

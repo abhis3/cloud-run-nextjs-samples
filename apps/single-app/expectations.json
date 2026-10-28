@@ -1,0 +1,113 @@
+{
+  "name": "single-app",
+  "description": "Reference hybrid App Router + Pages Router Next.js 16 application (npm) with proxy.ts, ISR, next/image, and error boundaries.",
+  "image": {
+    "labels": {
+      "google.web-cache-guard": "true",
+      "google.web-serve-mode": "standalone"
+    }
+  },
+  "routes": [
+    {
+      "name": "Root static page (/)",
+      "path": "/",
+      "status": 200,
+      "cacheControl": "unguarded",
+      "bodyContains": [
+        "Home Page",
+        "tracedFromPublic"
+      ]
+    },
+    {
+      "name": "Static page (/about)",
+      "path": "/about",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "responseHeaders": {
+        "x-about-header": "1"
+      },
+      "bodyContains": [
+        "About Page"
+      ]
+    },
+    {
+      "name": "Guarded proxy route (/dashboard)",
+      "path": "/dashboard",
+      "status": 200,
+      "cacheControl": "guarded",
+      "responseHeaders": {
+        "x-proxy-ran": "1"
+      },
+      "bodyContains": [
+        "Dashboard Secret Area"
+      ]
+    },
+    {
+      "name": "ISR dynamic route (/blog/a)",
+      "path": "/blog/a",
+      "status": 200,
+      "cacheControl": "unguarded-s-maxage",
+      "bodyContains": [
+        "Blog Post"
+      ]
+    },
+    {
+      "name": "Pages Router page (/legacy)",
+      "path": "/legacy",
+      "status": 200,
+      "bodyContains": [
+        "Pages Router Legacy Page"
+      ]
+    },
+    {
+      "name": "Pages Router API route (/api/legacy-api)",
+      "path": "/api/legacy-api",
+      "status": 200,
+      "jsonEquals": {
+        "legacy": true
+      }
+    },
+    {
+      "name": "Public static asset (/robots.txt)",
+      "path": "/robots.txt",
+      "status": 200,
+      "bodyContains": [
+        "User-agent: *"
+      ]
+    },
+    {
+      "name": "Next.js Image Optimization (/_next/image)",
+      "path": "/_next/image?url=%2Flogo.png&w=32&q=75",
+      "requestHeaders": {
+        "accept": "image/webp,*/*"
+      },
+      "status": 200,
+      "responseHeaders": {
+        "content-type": "image/webp"
+      }
+    },
+    {
+      "name": "App Router API route (/api/hello)",
+      "path": "/api/hello",
+      "status": 200,
+      "jsonContains": {
+        "hello": "world"
+      }
+    },
+    {
+      "name": "Non-existent route (/does-not-exist-404)",
+      "path": "/does-not-exist-404",
+      "status": 404
+    },
+    {
+      "name": "Pages Router 500 error page (/throw-pages)",
+      "path": "/throw-pages",
+      "status": 500
+    },
+    {
+      "name": "App Router 500 error boundary (/throw-app)",
+      "path": "/throw-app",
+      "status": 500
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "export-app",
+  "description": "Next.js 16 static export application (output: 'export'), verifying that the adapter preserves static export mode and webbundle stands down cleanly with a warning.",
+  "skipRuntime": true,
+  "skipRuntimeReason": "Static export (output: 'export') produces static HTML in out/ without a Node.js server entrypoint; webbundle logs a warning and stands down.",
+  "image": {
+    "labels": {
+      "google.web-cache-guard": null,
+      "google.web-serve-mode": null
+    }
+  },
+  "routes": []
+}

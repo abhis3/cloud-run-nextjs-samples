@@ -1,0 +1,39 @@
+{
+  "name": "custom-server-app",
+  "description": "Next.js 16 application with a custom Node.js HTTP server (\"start\": \"node server.js\"), verifying that webnextjs stands down and defers to the standard Node.js runtime.",
+  "image": {
+    "labels": {
+      "google.web-cache-guard": null,
+      "google.web-serve-mode": null
+    }
+  },
+  "routes": [
+    {
+      "name": "Root page via custom server.js (/)",
+      "path": "/",
+      "status": 200,
+      "bodyContains": [
+        "Home Page"
+      ]
+    },
+    {
+      "name": "Static page via custom server.js (/about)",
+      "path": "/about",
+      "status": 200,
+      "bodyContains": [
+        "About Page"
+      ]
+    },
+    {
+      "name": "Dashboard route via custom server.js (/dashboard)",
+      "path": "/dashboard",
+      "status": 200,
+      "responseHeaders": {
+        "x-proxy-ran": "1"
+      },
+      "bodyContains": [
+        "Dashboard Secret Area"
+      ]
+    }
+  ]
+}

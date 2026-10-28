@@ -1,0 +1,15 @@
+{
+  "name": "monorepo-nx",
+  "private": true,
+  "scripts": {
+    "build": "nx run-many -t build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "nx": "^20.4.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}
