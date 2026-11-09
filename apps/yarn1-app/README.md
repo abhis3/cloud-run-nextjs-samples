@@ -26,11 +26,12 @@
 
 | Route | Status | Guarded? | Expected `Cache-Control` / Headers |
 | :--- | :--- | :--- | :--- |
-| `GET /` | `200` | No | `s-maxage=31536000, max-age=0` |
+| `GET /` | `200` | No | `s-maxage=31536000, max-age=0`; `next/image` renders a plain `<img src="/logo.png">` (no `/_next/image` URL) |
 | `GET /about` | `200` | No | `s-maxage=31536000, max-age=0` (`x-about-header: 1`) |
 | `GET /dashboard` | `200` | **Yes** | `private, no-cache, no-store, max-age=0, must-revalidate` (`x-proxy-ran: 1`) |
 | `GET /blog/a` | `200` | No | `s-maxage=60, stale-while-revalidate=..., max-age=0` |
 | `GET /legacy` | `200` | No | `200 OK` (`Pages Router Legacy Page`) |
 | `GET /api/legacy-api` | `200` | No | `200 OK` (`{"legacy":true}`) |
 | `GET /robots.txt` | `200` | No | `200 OK` (`User-agent: *`) |
-| `GET /_next/image?url=%2Flogo.png&w=32&q=75` | `200` | No | `Content-Type: image/webp` |
+| `GET /logo.png` | `200` | No | `Content-Type: image/png` (original file from `public/`) |
+| `GET /_next/image?url=%2Flogo.png&w=32&q=75` | `404` | No | Next.js image optimization is off by default (`images.unoptimized: true`) |

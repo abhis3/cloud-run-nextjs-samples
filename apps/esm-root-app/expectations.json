@@ -1,6 +1,9 @@
 {
   "name": "esm-root-app",
-  "description": "Next.js 16 application with \"type\": \"module\" in the root package.json, verifying .cloudrun/package.json CommonJS isolation for .cloudrun/serve.js.",
+  "description": "Next.js 16 application with \"type\": \"module\" in the root package.json, verifying .cloudrun/package.json CommonJS isolation for .cloudrun/serve.js. Also builds with GOOGLE_NEXTJS_IMAGE_OPTIMIZATION=true to cover the image optimization opt-in.",
+  "buildEnv": {
+    "GOOGLE_NEXTJS_IMAGE_OPTIMIZATION": "true"
+  },
   "image": {
     "labels": {
       "google.web-cache-guard": "true",
@@ -76,7 +79,15 @@
       ]
     },
     {
-      "name": "Next.js Image Optimization (/_next/image)",
+      "name": "next/image uses /_next/image URLs (GOOGLE_NEXTJS_IMAGE_OPTIMIZATION=true)",
+      "path": "/",
+      "status": 200,
+      "bodyContains": [
+        "/_next/image?url=%2Flogo.png"
+      ]
+    },
+    {
+      "name": "Next.js image optimization opt-in (/_next/image returns WebP)",
       "path": "/_next/image?url=%2Flogo.png&w=32&q=75",
       "requestHeaders": {
         "accept": "image/webp,*/*"

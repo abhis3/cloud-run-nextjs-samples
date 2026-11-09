@@ -76,15 +76,31 @@
       ]
     },
     {
-      "name": "Next.js Image Optimization (/_next/image)",
+      "name": "next/image renders a plain <img> (image optimization off by default)",
+      "path": "/",
+      "status": 200,
+      "bodyContains": [
+        "src=\"/logo.png\""
+      ],
+      "bodyExcludes": [
+        "/_next/image"
+      ]
+    },
+    {
+      "name": "Original image from public/ (/logo.png)",
+      "path": "/logo.png",
+      "status": 200,
+      "responseHeaders": {
+        "content-type": "image/png"
+      }
+    },
+    {
+      "name": "Next.js image optimizer off by default (/_next/image returns 404)",
       "path": "/_next/image?url=%2Flogo.png&w=32&q=75",
       "requestHeaders": {
         "accept": "image/webp,*/*"
       },
-      "status": 200,
-      "responseHeaders": {
-        "content-type": "image/webp"
-      }
+      "status": 404
     },
     {
       "name": "App Router API route (/api/hello)",
