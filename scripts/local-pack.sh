@@ -247,8 +247,23 @@ if [[ "$CLEAR_CACHE" == "true" ]]; then
   PACK_ARGS+=(--clear-cache)
 fi
 
-echo "Building $APP_NAME -> $IMAGE_TAG with builder $BUILDER..."
-pack "${PACK_ARGS[@]}"
+# The GOOGLE_WEB_PRUNE mode this build uses: the last value passed to pack, or the buildpack default
+# (report-only) when none is set.
+EFFECTIVE_PRUNE="report-only"
+for arg in "${PACK_ENV_ARGS[@]}"; do
+  if [[ "$arg" == GOOGLE_WEB_PRUNE=* ]]; then
+    EFFECTIVE_PRUNE="${arg#GOOGLE_WEB_PRUNE=}"
+  fi
+done
+
+# verify.mjs reads this record (matched by image ID) to pick per-prune-mode expectations and to
+# check `buildLog` expectations against the build output.
+RECORD_DIR="$REPO_ROOT/.cache/local-pack"
+mkdir -p "$RECORD_DIR"
+BUILD_LOG="$RECORD_DIR/${APP_NAME}.build.log"
+
+echo "Building $APP_NAME -> $IMAGE_TAG with builder $BUILDER (GOOGLE_WEB_PRUNE=$EFFECTIVE_PRUNE)..."
+pack "${PACK_ARGS[@]}" 2>&1 | tee "$BUILD_LOG"
 
 # Also tag as <app-name>:latest and fab-sample-<app-name>:latest for convenience.
 if [[ "$IMAGE_TAG" != "${APP_NAME}:latest" ]]; then
@@ -258,4 +273,11 @@ if [[ "$IMAGE_TAG" != "fab-sample-${APP_NAME}:latest" ]]; then
   docker tag "$IMAGE_TAG" "fab-sample-${APP_NAME}:latest" 2>/dev/null || true
 fi
 
-echo "Built image: $IMAGE_TAG"
+IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$IMAGE_TAG" 2>/dev/null || true)"
+printf '{\n  "app": "%s",\n  "image": "%s",\n  "imageId": "%s",\n  "pruneMode": "%s",\n  "buildLog": "%s"\n}\n' \
+  "$APP_NAME" "$IMAGE_TAG" "$IMAGE_ID" "$EFFECTIVE_PRUNE" "$BUILD_LOG" > "$RECORD_DIR/${APP_NAME}.json"
+
+echo "Built image: $IMAGE_TAG (GOOGLE_WEB_PRUNE=$EFFECTIVE_PRUNE)"
+echo "Verify it after: docker run -d --rm -p 18080:8080 -e PORT=8080 $IMAGE_TAG"
+echo "  node $REPO_ROOT/scripts/verify.mjs $APP_DIR http://127.0.0.1:18080 --image=$IMAGE_TAG"
+echo "  (verify.mjs takes the prune mode and build log from $RECORD_DIR/${APP_NAME}.json)"

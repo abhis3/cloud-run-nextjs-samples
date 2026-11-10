@@ -1,22 +1,29 @@
 {
   "name": "crashlytics-sourcemaps",
-  "description": "Next.js app built with CRASHLYTICS_UPLOAD_MAPPING=true. Browser .js.map files are emitted during next build and stripped from the final container image by google.nodejs.websourcemaps; live Crashlytics upload requires a real Firebase app and is marked manual.",
+  "description": "Next.js app built with CRASHLYTICS_UPLOAD_MAPPING=true. Crashlytics source-map upload isn't available on Cloud Run yet, so the adapter ignores the variable (with a build-log warning) and doesn't turn on browser source maps: no .js.map files under .next/static, and no client chunk's source map is served. The upload itself is a known gap.",
   "buildEnv": {
     "CRASHLYTICS_UPLOAD_MAPPING": "true"
+  },
+  "buildLog": {
+    "contains": ["[adapter-nextjs] Warning: Ignoring CRASHLYTICS_UPLOAD_MAPPING=true"],
+    "excludes": ["Enabling NextConfig productionBrowserSourceMaps=true"]
   },
   "image": {
     "labels": {
       "google.web-cache-guard": "true",
-      "google.web-serve-mode": "standalone"
+      "google.web-serve-mode": {"byPruneMode": {"true": "standalone", "report-only": "project", "false": "project"}}
     },
-    "noFilesMatching": [".js.map"],
+    "noFilesMatching": [{ "suffix": ".js.map", "under": ".next/static" }],
     "manualChecks": [
       {
         "name": "crashlytics-sourcemap-upload",
-        "description": "Uploading browser .js.map files via firebase crashlytics:sourcemap:upload requires a live Firebase Web App ID (GOOGLE_CRASHLYTICS_APP_ID or FIREBASE_CRASHLYTICS_APP_ID) and GCP project credentials (GOOGLE_CLOUD_PROJECT).",
-        "mode": "manual"
+        "description": "Known gap: Crashlytics source-map upload during the build isn't available on Cloud Run yet. Once it ships, check that the maps reach Crashlytics (needs a live Firebase Web App ID and project credentials) and are removed from the image.",
+        "mode": "known-gap"
       }
     ]
+  },
+  "noPublicSourceMaps": {
+    "pages": ["/", "/dashboard"]
   },
   "routes": [
     {

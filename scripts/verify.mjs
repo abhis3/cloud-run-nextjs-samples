@@ -7,7 +7,14 @@
 //
 // Usage:
 //   node scripts/verify.mjs <app-dir-or-name> [<base-url>] [--image=<tag>] [--container=<id>]
+//                           [--prune=true|report-only|false] [--build-log=<file>]
 //   node scripts/verify.mjs --app=apps/single-app --url=http://127.0.0.1:18080
+//
+// --prune is the GOOGLE_WEB_PRUNE mode the image was built with. It picks per-mode expectations
+// such as `{"byPruneMode": {...}}` image labels. When it isn't passed, verify.mjs uses the record
+// that local-pack.sh writes for the exact image it built (.cache/local-pack/<app>.json), then the
+// GOOGLE_WEB_PRUNE env var, then local-pack.sh's default (true). That record also supplies the
+// build log for `buildLog` expectations; --build-log overrides it.
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -33,6 +40,8 @@ function parseArgs(argv) {
   let containerId = null;
   let buildIdArg = null;
   let expectApiData = null;
+  let pruneArg = null;
+  let buildLogArg = null;
   const positional = [];
 
   for (const a of argv.slice(2)) {
@@ -50,6 +59,10 @@ function parseArgs(argv) {
       buildIdArg = a.slice('--build-id='.length);
     } else if (a.startsWith('--expect-api-data=')) {
       expectApiData = a.slice('--expect-api-data='.length);
+    } else if (a.startsWith('--prune=')) {
+      pruneArg = a.slice('--prune='.length);
+    } else if (a.startsWith('--build-log=')) {
+      buildLogArg = a.slice('--build-log='.length);
     } else if (!a.startsWith('--')) {
       positional.push(a);
     }
@@ -73,6 +86,8 @@ function parseArgs(argv) {
     containerId,
     buildIdArg,
     expectApiData,
+    pruneArg,
+    buildLogArg,
   };
 }
 
@@ -89,6 +104,141 @@ function resolveAppDir(appArg) {
     }
   }
   return null;
+}
+
+const PRUNE_MODES = ['true', 'report-only', 'false'];
+
+// local-pack.sh writes .cache/local-pack/<app>.json (prune mode, build log) for each image it
+// builds. Use it only when it describes the exact image (or the container's image) under test.
+function readLocalPackRecord(appDir, { imageTag, containerId }) {
+  if (!appDir || !(imageTag || containerId)) return null;
+  const file = path.join(repoRoot, '.cache', 'local-pack', `${path.basename(appDir)}.json`);
+  if (!fs.existsSync(file)) return null;
+  const record = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const args = imageTag
+    ? ['image', 'inspect', '--format', '{{.Id}}', imageTag]
+    : ['inspect', '--format', '{{.Image}}', containerId];
+  try {
+    const imageId = execFileSync('docker', args, { encoding: 'utf8' }).trim();
+    return imageId && imageId === record.imageId ? record : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolvePruneMode(pruneArg, record) {
+  const candidates = [
+    [pruneArg, '--prune'],
+    [record?.pruneMode, `local-pack.sh record for ${record?.image}`],
+    [process.env.GOOGLE_WEB_PRUNE, 'GOOGLE_WEB_PRUNE env var'],
+  ];
+  for (const [mode, source] of candidates) {
+    if (mode) {
+      assert.ok(
+        PRUNE_MODES.includes(mode),
+        `Unknown prune mode '${mode}' (from ${source}); expected one of ${PRUNE_MODES.join(', ')}`
+      );
+      return { mode, source };
+    }
+  }
+  return { mode: 'true', source: "default (local-pack.sh's --prune=true)" };
+}
+
+// An expected value is either literal or `{"byPruneMode": {"true": ..., "report-only": ..., "false": ...}}`.
+function expectedForPruneMode(expected, pruneMode) {
+  if (expected && typeof expected === 'object' && expected.byPruneMode) {
+    assert.ok(
+      Object.hasOwn(expected.byPruneMode, pruneMode.mode),
+      `No expected value for GOOGLE_WEB_PRUNE=${pruneMode.mode} in ${JSON.stringify(expected)}`
+    );
+    return expected.byPruneMode[pruneMode.mode];
+  }
+  return expected;
+}
+
+// Runs inside the container: counts files under /workspace whose name ends with argv[1], skipping
+// node_modules and not following symlinks. With argv[2] set (e.g. ".next/static"), only files
+// below a directory path containing "/<argv[2]>/" count.
+const COUNT_FILES_SCRIPT = [
+  'const fs=require("fs"),path=require("path");',
+  'const [suffix,under,root]=process.argv.slice(1);',
+  'let n=0;',
+  'const walk=(d)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){',
+  'if(e.name==="node_modules")continue;',
+  'const p=path.join(d,e.name);',
+  'if(e.isDirectory())walk(p);',
+  'else if(e.name.endsWith(suffix)&&(!under||p.includes("/"+under+"/")))n++;}};',
+  'walk(root||"/workspace");console.log(n);',
+].join('');
+
+function verifyBuildLog(buildLogExp, buildLogPath) {
+  if (!buildLogExp) return [];
+  const contains = buildLogExp.contains || [];
+  const excludes = buildLogExp.excludes || [];
+  if (!buildLogPath) {
+    return [
+      {
+        check: 'build-log',
+        status: 'manual',
+        note: 'No build log to check: pass --build-log=<file>, or verify an image built by local-pack.sh',
+        contains,
+        excludes,
+      },
+    ];
+  }
+  const text = fs.readFileSync(buildLogPath, 'utf8');
+  for (const needle of contains) {
+    assert.ok(text.includes(needle), `build log ${buildLogPath}: missing '${needle}'`);
+  }
+  for (const needle of excludes) {
+    assert.ok(!text.includes(needle), `build log ${buildLogPath}: unexpectedly contained '${needle}'`);
+  }
+  return [{ check: 'build-log', status: 'pass', buildLog: buildLogPath }];
+}
+
+// Fetches each page, then every /_next/static/chunks/*.js it references. A chunk's source map must
+// not be served: neither the map its `//# sourceMappingURL=` comment points at (Turbopack names
+// maps by their own hash) nor `<chunk>.js.map`.
+async function verifyNoPublicSourceMaps(spec, baseUrl) {
+  const results = [];
+  for (const page of spec?.pages || []) {
+    const label = `no-public-source-maps ${page}`;
+    const html = await httpRequest(baseUrl, page);
+    assert.equal(html.status, 200, `${label}: expected 200 for the page, got ${html.status}`);
+    const chunks = [
+      ...new Set(
+        [...html.text.matchAll(/["'](\/[^"'\s]*?_next\/static\/chunks\/[^"'\s?#]+?\.js)(?=["'?#])/g)].map(
+          (m) => m[1]
+        )
+      ),
+    ];
+    assert.ok(chunks.length > 0, `${label}: no /_next/static/chunks/*.js URLs found in the page`);
+    let withMapComment = 0;
+    for (const chunk of chunks) {
+      const js = await httpRequest(baseUrl, chunk);
+      assert.equal(js.status, 200, `${label}: expected 200 for ${chunk}, got ${js.status}`);
+      const mapUrls = [`${chunk}.map`];
+      const comment = js.text.match(/[#@] sourceMappingURL=([^\s'"*]+)/);
+      if (comment) {
+        withMapComment++;
+        assert.ok(
+          !comment[1].startsWith('data:'),
+          `${label}: ${chunk} has an inline (data: URI) source map, which publishes its source`
+        );
+        mapUrls.push(new URL(comment[1], `http://placeholder${chunk}`).pathname);
+      }
+      for (const mapUrl of mapUrls) {
+        const map = await httpRequest(baseUrl, mapUrl);
+        assert.notEqual(
+          map.status,
+          200,
+          `${label}: source map ${mapUrl} (for ${chunk}) is publicly served (Cache-Control: '${map.headers['cache-control'] || ''}')`
+        );
+      }
+    }
+    results.push({ check: label, status: 'pass', chunks: chunks.length, chunksWithSourceMappingURL: withMapComment });
+  }
+  return results;
 }
 
 async function httpRequest(baseUrl, routePath, method = 'GET', headers = {}) {
@@ -263,14 +413,14 @@ async function resolveBuildId({ buildIdArg, appDir, containerId, baseUrl, expect
   return null;
 }
 
-function verifyImageExpectations(imageExp, { imageTag, containerId }) {
+function verifyImageExpectations(imageExp, { imageTag, containerId, pruneMode }) {
   const results = [];
   if (!imageExp) return results;
 
   for (const manual of imageExp.manualChecks || []) {
     results.push({
       check: `image:${manual.name || 'manual'}`,
-      status: 'manual',
+      status: manual.mode === 'known-gap' ? 'known-gap' : 'manual',
       description: manual.description || '',
     });
   }
@@ -283,7 +433,10 @@ function verifyImageExpectations(imageExp, { imageTag, containerId }) {
       encoding: 'utf8',
     }).trim();
     const labels = JSON.parse(raw) || {};
-    for (const [k, expectedVal] of Object.entries(imageExp.labels)) {
+    const expectedLabels = {};
+    for (const [k, rawExpected] of Object.entries(imageExp.labels)) {
+      const expectedVal = expectedForPruneMode(rawExpected, pruneMode);
+      expectedLabels[k] = expectedVal;
       if (expectedVal === null) {
         assert.equal(
           labels[k],
@@ -294,50 +447,33 @@ function verifyImageExpectations(imageExp, { imageTag, containerId }) {
         assert.equal(
           labels[k],
           expectedVal,
-          `Expected image label '${k}=${expectedVal}', got '${labels[k]}'`
+          `Expected image label '${k}=${expectedVal}' (GOOGLE_WEB_PRUNE=${pruneMode.mode}, from ${pruneMode.source}), got '${labels[k]}'`
         );
       }
     }
-    results.push({ check: 'image:labels', status: 'pass', labels: imageExp.labels });
+    results.push({ check: 'image:labels', status: 'pass', labels: expectedLabels });
   }
 
-  if (imageExp.noFilesMatching && imageExp.noFilesMatching.length > 0) {
-    for (const suffix of imageExp.noFilesMatching) {
-      let count = 0;
-      if (containerId) {
-        const out = execFileSync(
-          'docker',
-          [
-            'exec',
-            containerId,
-            '/layers/google.nodejs.runtime/node/bin/node',
-            '-e',
-            'const fs=require("fs");const s=process.argv[1];console.log(fs.readdirSync("/workspace",{recursive:true}).filter(f=>String(f).endsWith(s)).length);',
-            suffix,
-          ],
-          { encoding: 'utf8' }
-        ).trim();
-        count = Number(out);
-      } else if (imageTag) {
-        const out = execFileSync(
-          'docker',
-          [
-            'run',
-            '--rm',
-            '--entrypoint',
-            '/layers/google.nodejs.runtime/node/bin/node',
-            imageTag,
-            '-e',
-            'const fs=require("fs");const s=process.argv[1];console.log(fs.readdirSync("/workspace",{recursive:true}).filter(f=>String(f).endsWith(s)).length);',
-            suffix,
-          ],
-          { encoding: 'utf8' }
-        ).trim();
-        count = Number(out);
-      }
-      assert.equal(count, 0, `Expected 0 files ending with '${suffix}' in /workspace, found ${count}`);
-      results.push({ check: `image:noFilesMatching(${suffix})`, status: 'pass', count: 0 });
-    }
+  // Entries are a suffix (".js.map") or {"suffix": ".js.map", "under": ".next/static"}.
+  // node_modules is always skipped.
+  for (const entry of imageExp.noFilesMatching || []) {
+    const { suffix, under = '' } = typeof entry === 'string' ? { suffix: entry } : entry;
+    const nodeArgs = ['-e', COUNT_FILES_SCRIPT, suffix, under];
+    const dockerArgs = containerId
+      ? ['exec', containerId, '/layers/google.nodejs.runtime/node/bin/node', ...nodeArgs]
+      : ['run', '--rm', '--entrypoint', '/layers/google.nodejs.runtime/node/bin/node', imageTag, ...nodeArgs];
+    const count = Number(execFileSync('docker', dockerArgs, { encoding: 'utf8' }).trim());
+    const where = under ? `under '${under}' in /workspace` : 'in /workspace';
+    assert.equal(
+      count,
+      0,
+      `Expected 0 files ending with '${suffix}' ${where} (node_modules skipped), found ${count}`
+    );
+    results.push({
+      check: `image:noFilesMatching(${suffix}${under ? ` under ${under}` : ''})`,
+      status: 'pass',
+      count: 0,
+    });
   }
 
   return results;
@@ -499,12 +635,18 @@ async function main() {
 
   const expectations = JSON.parse(fs.readFileSync(expFile, 'utf8'));
   const results = [];
+  const record = readLocalPackRecord(appDir, opts);
+  const pruneMode = resolvePruneMode(opts.pruneArg, record);
+  const buildLogPath = opts.buildLogArg || record?.buildLog || null;
 
   // 1. Image / container checks (if --image or --container supplied, or manualChecks defined).
-  const imageResults = verifyImageExpectations(expectations.image, opts);
+  const imageResults = verifyImageExpectations(expectations.image, { ...opts, pruneMode });
   results.push(...imageResults);
 
-  // 2. Runtime HTTP & Cache-Guard checks.
+  // 2. Build log checks (if expectations.json has `buildLog`).
+  results.push(...verifyBuildLog(expectations.buildLog, buildLogPath));
+
+  // 3. Runtime HTTP & Cache-Guard checks.
   if (!expectations.skipRuntime) {
     const routes = expectations.routes || [];
     const needsBuildId = routes.some(
@@ -522,6 +664,7 @@ async function main() {
       });
       results.push(r);
     }
+    results.push(...(await verifyNoPublicSourceMaps(expectations.noPublicSourceMaps, opts.baseUrl)));
   } else {
     results.push({
       check: 'runtime',
@@ -543,6 +686,7 @@ async function main() {
         app: expectations.name || (appDir ? path.basename(appDir) : 'unknown'),
         status: overallStatus,
         baseUrl: expectations.skipRuntime ? null : opts.baseUrl,
+        pruneMode,
         results,
       },
       null,

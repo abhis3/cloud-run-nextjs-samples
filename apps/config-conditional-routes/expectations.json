@@ -5,7 +5,7 @@
   "image": {
     "labels": {
       "google.web-cache-guard": "true",
-      "google.web-serve-mode": "standalone"
+      "google.web-serve-mode": {"byPruneMode": {"true": "standalone", "report-only": "project", "false": "project"}}
     }
   },
   "routes": [

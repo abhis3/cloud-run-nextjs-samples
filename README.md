@@ -74,6 +74,8 @@ By default, `local-pack.sh` uses `gcr.io/buildpacks/builder:latest` (which will 
 ./scripts/local-pack.sh apps/single-app --builder my-local-builder:latest
 ```
 
+`local-pack.sh` also saves the build output to `.cache/local-pack/<app>.build.log` and writes `.cache/local-pack/<app>.json` (image ID, `GOOGLE_WEB_PRUNE` mode, build log path), which `verify.mjs` uses for that exact image.
+
 Run the resulting container locally:
 
 ```bash
@@ -109,7 +111,15 @@ node ./scripts/verify.mjs apps/single-app http://127.0.0.1:18080
 
 # Also verify container image labels and stripped files (.js.map)
 node ./scripts/verify.mjs apps/single-app http://127.0.0.1:18080 --image=fab-sample-single-app:latest
+
+# Verify an image that some other tool built in report-only mode, with its build log
+node ./scripts/verify.mjs apps/single-app http://127.0.0.1:18080 --image=<tag> --prune=report-only --build-log=build.log
 ```
+
+- **Prune mode**: expectations can vary by `GOOGLE_WEB_PRUNE` mode, e.g. `"google.web-serve-mode": {"byPruneMode": {"true": "standalone", "report-only": "project", "false": "project"}}`, so one `expectations.json` verifies every mode. `verify.mjs` takes the mode from `--prune`, then from the `local-pack.sh` record for the same image, then from the `GOOGLE_WEB_PRUNE` env var, and otherwise assumes `true` (`local-pack.sh`'s default). The output JSON shows which mode it used and where it came from.
+- **Build log**: `buildLog.contains` / `buildLog.excludes` are checked against `--build-log=<file>` or the log `local-pack.sh` saved. Without a log they're reported as `manual`.
+- **Image files**: `image.noFilesMatching` entries are a suffix (`".js.map"`) or `{"suffix": ".js.map", "under": ".next/static"}`. `node_modules` is always skipped.
+- **Public source maps**: `noPublicSourceMaps.pages` loads each page, then every `/_next/static/chunks/*.js` it references, and fails if a chunk's source map is served (the map named by its `//# sourceMappingURL=` comment, or `<chunk>.js.map`).
 
 ---
 
@@ -131,7 +141,7 @@ node ./scripts/verify.mjs apps/single-app http://127.0.0.1:18080 --image=fab-sam
 | [`apps/proxy-matchers`](apps/proxy-matchers) | `npm` | `GOOGLE_WEB_FRAMEWORKS=true`, `GOOGLE_WEB_PRUNE=true` | `proxy.ts` `config.matcher` entries with `has`/`missing` conditions (`header`, `cookie`, `query`) in front of SSG/ISR pages. | **Pass**: Adapter strips `has`/`missing` from `next-routing.json` (fail-closed), so matched paths (`/header-gated`, `/cookie-gated`, `/query-gated`) are guarded (`private, no-cache, no-store, max-age=0, must-revalidate`, all 4 CDN headers stripped) whether or not the condition holds; unmatched routes (`/`, `/public-isr`) keep `s-maxage` + `max-age=0`. |
 | [`apps/config-conditional-routes`](apps/config-conditional-routes) | `npm` | `GOOGLE_WEB_FRAMEWORKS=true`, `GOOGLE_WEB_PRUNE=true` | No `proxy.ts`; `next.config.mjs` `rewrites()` and `headers()` with `has`/`missing` (`header` `x-tier`, `cookie` `tier=vip`) routing `/pricing` and `/offer` to different static pages. | **Known Gap** (`"mode": "known-gap"`): Runtime cache guard only covers `proxy.ts`/`middleware.ts` matchers, so conditional `next.config.mjs` rewrites/headers on static paths (`/pricing`, `/offer`) retain `s-maxage=31536000, max-age=0`. |
 | [`apps/pages-router-proxy`](apps/pages-router-proxy) | `npm` | `GOOGLE_WEB_FRAMEWORKS=true`, `GOOGLE_WEB_PRUNE=true` | Pages Router SSG (`/guarded-ssg`), ISR (`/guarded-isr`), and API (`/api/guarded-api`) routes behind `proxy.ts`, plus `/_next/data/<buildId>/...json` requests. | **Pass**: Guarded Pages Router HTML pages, their `/_next/data/<buildId>/{guarded-ssg,guarded-isr}.json` data endpoints, and `/api/guarded-api` are clamped to `private, no-cache, no-store, max-age=0, must-revalidate` with `CDN-Cache-Control` stripped; unguarded SSG/ISR/API routes (`/`, `/_next/data/<buildId>/index.json`, `/public-isr`, `/api/public-api`) keep `s-maxage` + `max-age=0`. |
-| [`apps/crashlytics-sourcemaps`](apps/crashlytics-sourcemaps) | `npm` | `GOOGLE_WEB_FRAMEWORKS=true`, `GOOGLE_WEB_PRUNE=true`, `CRASHLYTICS_UPLOAD_MAPPING=true` | Browser source map generation (`CRASHLYTICS_UPLOAD_MAPPING=true`) and `google.nodejs.websourcemaps` stripping + env var documentation (`GOOGLE_CRASHLYTICS_APP_ID`, `FIREBASE_CRASHLYTICS_APP_ID`, `FIREBASE_WEBAPP_CONFIG`, `GOOGLE_CLOUD_PROJECT`, `CRASHLYTICS_APP_VERSION`, `GOOGLE_CRASHLYTICS_APP_VERSION`, `K_REVISION`). | **Pass (with Manual)**: Adapter sets `productionBrowserSourceMaps: true` (emits `.js.map` files during `next build`) and `websourcemaps` strips all `.js.map` files from the final container image (`0` `.js.map` files in `/workspace`); live Crashlytics upload requires a real Firebase Web App ID + credentials and is marked `"mode": "manual"`. |
+| [`apps/crashlytics-sourcemaps`](apps/crashlytics-sourcemaps) | `npm` | `GOOGLE_WEB_FRAMEWORKS=true`, `GOOGLE_WEB_PRUNE=true`, `CRASHLYTICS_UPLOAD_MAPPING=true` | `CRASHLYTICS_UPLOAD_MAPPING=true` while Crashlytics source-map upload isn't available on Cloud Run: the adapter ignores it (build-log warning) and doesn't turn on browser source maps. | **Known gap (upload)**: no `.js.map` under `.next/static` in the image; no client chunk's source map is served (`noPublicSourceMaps`); the build log has the adapter's warning. The Crashlytics upload itself is `known-gap`. |
 
 ---
 
@@ -139,5 +149,7 @@ node ./scripts/verify.mjs apps/single-app http://127.0.0.1:18080 --image=fab-sam
 
 1. **`next.config` conditional `rewrites` / `headers` (`has` / `missing`) without `proxy.ts`**:
    - Today's `.cloudrun/serve.js` cache guard evaluates `routing.middlewareMatchers` (from `proxy.ts` or `middleware.ts`), `beforeMiddleware` redirects, and malformed URL fail-closed checks. It does **not** clamp `Cache-Control` for routes that use `has` or `missing` conditions (such as cookie- or header-based rewrites) strictly inside `next.config` when no `proxy.ts` / `middleware.ts` matcher covers the path. See [`apps/config-conditional-routes`](apps/config-conditional-routes) for a reproducible test case.
-2. **Cloud Run Platform CDN**:
+2. **Crashlytics source-map upload**:
+   - Uploading browser source maps to Crashlytics during the build isn't available on Cloud Run yet. Until it is, `@google-cloud/adapter-nextjs` ignores `CRASHLYTICS_UPLOAD_MAPPING` (it logs a warning) and doesn't turn on `productionBrowserSourceMaps`, because without an upload-and-strip step the maps would be served publicly. [`apps/crashlytics-sourcemaps`](apps/crashlytics-sourcemaps) checks that nothing is exposed and marks the upload `known-gap`.
+3. **Cloud Run Platform CDN**:
    - Cloud Run's built-in platform CDN is not yet generally available on default `.run.app` endpoints. To test edge caching and `s-maxage` / `private` behavior end-to-end today, place **Cloud CDN** in front of your Cloud Run service using a Global External Application Load Balancer and a Serverless NEG with `--cache-mode=USE_ORIGIN_HEADERS`. See **[`docs/caching-with-cloud-cdn.md`](docs/caching-with-cloud-cdn.md)** for step-by-step instructions.

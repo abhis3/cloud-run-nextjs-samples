@@ -232,3 +232,13 @@ if [[ "$DRY_RUN" == "true" ]]; then
 fi
 
 "${CMD[@]}"
+
+# The GOOGLE_WEB_PRUNE mode this deploy built with: the last value set, or the buildpack default.
+EFFECTIVE_PRUNE="report-only"
+for kv in "${BUILD_ENV_LIST[@]}"; do
+  if [[ "$kv" == GOOGLE_WEB_PRUNE=* ]]; then
+    EFFECTIVE_PRUNE="${kv#GOOGLE_WEB_PRUNE=}"
+  fi
+done
+echo "Verify the service (GOOGLE_WEB_PRUNE=$EFFECTIVE_PRUNE; image labels and files are only checked with --image):"
+echo "  node $REPO_ROOT/scripts/verify.mjs $APP_DIR <service-url> --prune=$EFFECTIVE_PRUNE [--build-log=<saved Cloud Build log>]"
